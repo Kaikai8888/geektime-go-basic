@@ -1,6 +1,10 @@
 package main
 
 import (
+	"net/http"
+	"strings"
+	"time"
+
 	"gitee.com/geekbang/basic-go/webook/config"
 	"gitee.com/geekbang/basic-go/webook/internal/repository"
 	"gitee.com/geekbang/basic-go/webook/internal/repository/dao"
@@ -15,9 +19,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"net/http"
-	"strings"
-	"time"
 )
 
 func main() {

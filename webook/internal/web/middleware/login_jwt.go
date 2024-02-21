@@ -1,13 +1,14 @@
 package middleware
 
 import (
-	"gitee.com/geekbang/basic-go/webook/internal/web"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"gitee.com/geekbang/basic-go/webook/internal/web"
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type LoginJWTMiddlewareBuilder struct {
@@ -16,7 +17,7 @@ type LoginJWTMiddlewareBuilder struct {
 func (m *LoginJWTMiddlewareBuilder) CheckLogin() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		path := ctx.Request.URL.Path
-		if path == "/users/signup" || path == "/users/login" {
+		if path == "/users/signup" || path == "/users/login" || path == "/hello" {
 			// 不需要登录校验
 			return
 		}
