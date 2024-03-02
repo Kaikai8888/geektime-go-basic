@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
-	"gitee.com/geekbang/basic-go/webook/internal/repository/cache"
+
+	cache "gitee.com/geekbang/basic-go/webook/internal/repository/local_cache"
 )
 
 var ErrCodeVerifyTooMany = cache.ErrCodeVerifyTooMany
+var ErrCodeSendTooMany = cache.ErrCodeSendTooMany
 
 type CodeRepository interface {
 	Set(ctx context.Context, biz, phone, code string) error

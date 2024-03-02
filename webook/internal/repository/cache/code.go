@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -18,7 +19,7 @@ var (
 	ErrCodeVerifyTooMany = errors.New("验证太频繁")
 )
 
-type CodeCache interface {
+type CodeRedisCache interface {
 	Set(ctx context.Context, biz, phone, code string) error
 	Verify(ctx context.Context, biz, phone, code string) (bool, error)
 }
@@ -27,7 +28,7 @@ type RedisCodeCache struct {
 	cmd redis.Cmdable
 }
 
-func NewCodeCache(cmd redis.Cmdable) CodeCache {
+func NewRedisCodeCache(cmd redis.Cmdable) CodeRedisCache {
 	return &RedisCodeCache{
 		cmd: cmd,
 	}

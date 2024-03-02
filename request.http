@@ -1,0 +1,49 @@
+@hostname = http://localhost
+@port = 8080
+@host = {{hostname}}:{{port}}
+
+@token = eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MDgxNjA5NTUsIlVpZCI6MX0.suIJ2-2_e8Cy49Ro0fHxplDUO4c1mb5EIEieEAAPqMsPUCgpRxtQ2hNjTgBxkae4vcak29Rd40qh9_lgT_2SMA
+@authToken = Bearer {{login.response.headers.X-Jwt-Token}}
+
+### Signup
+POST {{host}}/users/signup
+content-type: application/json
+
+{ 
+  "email": "test1@example.com",
+  "phone": "1234567890",
+  "password": "abc123$$$",
+  "confirmPassword": "abc123$$$"
+}
+
+### Login
+# @name login
+POST {{host}}/users/login
+content-type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "abc123$$$"
+}
+
+### Profile
+GET {{host}}/users/profile
+content-type: application/json
+authorization: {{authToken}}
+
+### Login with SMS: Send Code
+POST {{host}}/users/login_sms/code/send
+content-type: application/json
+
+{
+  "phone": "1234567890"
+}
+
+### Login with SMS: Verify Code
+POST {{host}}/users/login_sms
+content-type: application/json
+
+{
+  "phone": "1234567890",
+  "code": "506322"
+}
