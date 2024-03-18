@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"gitee.com/geekbang/basic-go/webook/internal/service/sms"
+	list "github.com/ecodeclub/ekit/list"
 )
 
 var (
 	ErrThirdPartyProviderCrash = errors.New("third party provider crash down")
+	ErrUnexpectedType          = errors.New("unexpected data type")
 )
 
 type FaultDetectBySlidingWindowErrorRateSMSService struct {
@@ -52,13 +54,19 @@ type SlidingWindowRateCounter struct {
 	accumulatedMatchedCount int
 	accumulatedCount        int // rate = accumulatedMatchedCount / accumulatedCount
 
-	startAt    time.Time
-	statistics map[time.Time]statistic // key: interval start, value: count
+	startAt          time.Time
+	records          list.List[record]
+	isExpireJobStart bool
 }
 
-type statistic struct {
-	matchedCount int
-	totalCount   int
+type record struct {
+	time      time.Time
+	matched   bool
+	expiredAt time.Time
+}
+
+func (s *record) IsExpired() bool {
+	return s.expiredAt.Before(time.Now())
 }
 
 func NewSlidingWindowRateCounter(window int, countInterval int, unit time.Duration) RateCounter {
@@ -71,52 +79,73 @@ func NewSlidingWindowRateCounter(window int, countInterval int, unit time.Durati
 	}
 
 	now := time.Now()
-	return &SlidingWindowRateCounter{
+	rateCounter := &SlidingWindowRateCounter{
 		window:        window,
 		countInterval: countInterval,
 		startAt:       now,
 		unit:          unit,
+		records: &list.ConcurrentList[record]{
+			List: list.NewLinkedList[record](),
+		},
 	}
+
+	return rateCounter
 }
 
 func (c *SlidingWindowRateCounter) Add(matched bool) float64 {
-	// TODO: atomic operation
-	now := time.Now()
-	key := c.intervalStartAt(now)
-	intervalStatistic, ok := c.statistics[key]
-	if !ok {
-		intervalStatistic = statistic{}
+	if !c.isExpireJobStart {
+		c.startExpireJob()
 	}
 
+	now := time.Now()
+	r := record{time: now, matched: matched, expiredAt: now.Add(c.getWindow())}
+	c.records.Append(r)
+
+	// TODO: atomic
 	if matched {
 		c.accumulatedMatchedCount++
-		intervalStatistic.matchedCount++
 	}
 	c.accumulatedCount++
-	intervalStatistic.totalCount++
-
-	c.statistics[key] = intervalStatistic
 
 	return float64(c.accumulatedMatchedCount) / float64(c.accumulatedCount) // TODO: 浮點數問題？四捨五入到小數點下第二位？
 }
 
-func (c *SlidingWindowRateCounter) intervalStartAt(now time.Time) time.Time {
-	windowStartAt := c.windowStartAt(now)
-	durationSinceWindowStart := now.Sub(c.windowStartAt(now))
-	interval := c.getCountInterval()
-	intervalCount := durationSinceWindowStart.Truncate(interval)
-	durationBtwWindowStartAndIntervalStart := time.Duration(intervalCount) * interval
+func (c *SlidingWindowRateCounter) startExpireJob() {
+	interval := time.Duration(c.countInterval) * c.unit
 
-	return windowStartAt.Add(durationBtwWindowStartAndIntervalStart)
-}
+	expireJob := func() error {
+		time.Sleep(interval)
 
-func (c *SlidingWindowRateCounter) windowStartAt(now time.Time) time.Time {
-	window := time.Duration(-1) * c.getWindow()
-	return now.Add(window)
-}
+		for {
+			r, err := c.records.Get(0)
+			if err != nil {
+				return err
+			}
+			if !r.IsExpired() {
+				break
+			}
 
-func (c *SlidingWindowRateCounter) getCountInterval() time.Duration {
-	return time.Duration(c.countInterval) * c.unit
+			if _, err := c.records.Delete(0); err != nil {
+				// 即使删到的资料跟前面get的不同, 也只会有一点点误差
+				return err
+			}
+
+			// TODO: atomic
+			if r.matched {
+				c.accumulatedMatchedCount--
+			}
+			c.accumulatedCount--
+		}
+		return nil
+	}
+
+	go func() {
+		// TODO: gracefully shutdown?
+		for {
+			expireJob()
+		}
+	}()
+
 }
 
 func (c *SlidingWindowRateCounter) getWindow() time.Duration {
