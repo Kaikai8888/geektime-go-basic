@@ -52,6 +52,41 @@ type RateCounter interface {
 	Add(matched bool) (float64, error) // return rate
 }
 
+type SlidingWindowRateCounterWithMinDataPointLimit struct {
+	counter           SlidingWindowRateCounter
+	minDataPointCount int // 至少要收集到一定数量的资料, 才能计算rate, 不然rate = 0
+}
+
+func NewSlidingWindowRateCounterWithMinDataPointLimit(window int, countInterval int, unit time.Duration, minDataPointCount int) RateCounter {
+	counter := NewSlidingWindowRateCounter(window, countInterval, unit)
+
+	rateCounter, ok := counter.(*SlidingWindowRateCounter)
+	if !ok {
+		panic("unexpected type")
+	}
+	return &SlidingWindowRateCounterWithMinDataPointLimit{
+		counter:           *rateCounter,
+		minDataPointCount: minDataPointCount,
+	}
+}
+
+func (c *SlidingWindowRateCounterWithMinDataPointLimit) StartExpireJob(ctx context.Context) error {
+	return c.counter.StartExpireJob(ctx)
+}
+
+func (c *SlidingWindowRateCounterWithMinDataPointLimit) Add(matched bool) (float64, error) {
+	rate, err := c.counter.Add(matched)
+	if err != nil {
+		return 0, err
+	}
+
+	if c.counter.accumulatedCount < c.minDataPointCount {
+		rate = 0
+	}
+
+	return rate, nil
+}
+
 type SlidingWindowRateCounter struct {
 	window        int
 	countInterval int
