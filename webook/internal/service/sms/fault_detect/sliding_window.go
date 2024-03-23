@@ -3,6 +3,7 @@ package fault_detect
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"gitee.com/geekbang/basic-go/webook/internal/service/sms"
@@ -53,6 +54,7 @@ type SlidingWindowRateCounter struct {
 
 	accumulatedMatchedCount int
 	accumulatedCount        int // rate = accumulatedMatchedCount / accumulatedCount
+	lock                    sync.RWMutex
 
 	startAt          time.Time
 	records          list.List[record]
@@ -101,13 +103,14 @@ func (c *SlidingWindowRateCounter) Add(matched bool) float64 {
 	r := record{time: now, matched: matched, expiredAt: now.Add(c.getWindow())}
 	c.records.Append(r)
 
-	// TODO: atomic
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	if matched {
 		c.accumulatedMatchedCount++
 	}
 	c.accumulatedCount++
 
-	return float64(c.accumulatedMatchedCount) / float64(c.accumulatedCount) // TODO: 浮點數問題？四捨五入到小數點下第二位？
+	return float64(c.accumulatedMatchedCount) / float64(c.accumulatedCount)
 }
 
 func (c *SlidingWindowRateCounter) startExpireJob() {
@@ -130,11 +133,12 @@ func (c *SlidingWindowRateCounter) startExpireJob() {
 				return err
 			}
 
-			// TODO: atomic
+			c.lock.Lock()
 			if r.matched {
 				c.accumulatedMatchedCount--
 			}
 			c.accumulatedCount--
+			c.lock.Unlock()
 		}
 		return nil
 	}
