@@ -139,6 +139,8 @@ func (c *SlidingWindowRateCounter) Add(matched bool) (float64, error) {
 		return 0, ErrExpireJobNotStarted
 	}
 
+	c.expireJob() // 确保过期资料有删除, counter 有更新
+
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -161,49 +163,17 @@ func (c *SlidingWindowRateCounter) StartExpireJob(ctx context.Context) error {
 
 	interval := time.Duration(c.countInterval) * c.unit
 
-	expireJob := func() {
-		fmt.Printf("Wait till next expire job, interval: %d (%d seconds)....\n", c.countInterval, int(c.unit.Seconds()))
-		time.Sleep(interval)
-
-		fmt.Printf("Start checking if expired records exist\n")
-		// delete all expired records
-		for c.records.Len() > 0 {
-			c.lock.Lock()
-			defer c.lock.Unlock()
-			r, err := c.records.Get(0)
-			fmt.Printf("Get one expired record: %+v\n", r)
-
-			if err != nil {
-				fmt.Printf("error occurs when getting records: %v\n", err)
-				break
-			}
-			if !r.IsExpired() {
-				break
-			}
-
-			if _, err := c.records.Delete(0); err != nil {
-				// 即使删到的资料跟前面get的不同, 也只会有一点点误差
-				fmt.Printf("error occurs when deleting records: %v\n", err)
-				break
-			}
-
-			if r.matched {
-				c.accumulatedMatchedCount--
-			}
-			c.accumulatedCount--
-			fmt.Printf("Delete one expired record: %+v\n", r)
-		}
-	}
-
 	// subCtx, cancel := context.WithCancel(ctx)
-
+	// 定时更新, 避免资料持续累积
 	go func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default: // non blocking
-				expireJob()
+				fmt.Printf("Wait till next expire job, interval: %d (%d seconds)....\n", c.countInterval, int(c.unit.Seconds()))
+				time.Sleep(interval)
+				c.expireJob()
 			}
 		}
 	}(ctx)
@@ -215,6 +185,40 @@ func (c *SlidingWindowRateCounter) StartExpireJob(ctx context.Context) error {
 	// }
 	c.isExpireJobStart = true
 	return nil
+}
+
+func (c *SlidingWindowRateCounter) expireJob() {
+	// lock the whole counter until current expire job end
+	c.lock.Lock()
+	fmt.Printf("Start checking if expired records exist\n")
+	defer c.lock.Unlock()
+	// delete all expired records
+	for c.records.Len() > 0 {
+
+		r, err := c.records.Get(0)
+		fmt.Printf("Get one record: %+v\n", r)
+
+		if err != nil {
+			fmt.Printf("error occurs when getting records: %v\n", err)
+			break
+		}
+		if !r.IsExpired() {
+			fmt.Printf("the earliest record is not expired\n")
+			break
+		}
+
+		if _, err := c.records.Delete(0); err != nil {
+			// 即使删到的资料跟前面get的不同, 也只会有一点点误差
+			fmt.Printf("error occurs when deleting records: %v\n", err)
+			break
+		}
+
+		if r.matched {
+			c.accumulatedMatchedCount--
+		}
+		c.accumulatedCount--
+		fmt.Printf("Delete one expired record: %+v\ncurrent counter: %+v\n", r, c)
+	}
 }
 
 func (c *SlidingWindowRateCounter) getWindow() time.Duration {
