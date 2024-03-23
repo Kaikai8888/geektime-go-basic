@@ -3,6 +3,7 @@ package fault_detect
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 var (
 	ErrThirdPartyProviderCrash = errors.New("third party provider crash down")
 	ErrUnexpectedType          = errors.New("unexpected data type")
+	ErrExpireJobNotStarted     = errors.New("expire job not started yet") // should call StartExpireJob before calculating rate
 )
 
 type FaultDetectBySlidingWindowErrorRateSMSService struct {
@@ -34,7 +36,9 @@ func NewFaultDetectBySlidingWindowErrorRateSMSService(smsSvc sms.Service, rateCo
 func (s *FaultDetectBySlidingWindowErrorRateSMSService) Send(ctx context.Context, tplId string, args []string, numbers ...string) error {
 	if err := s.smsSvc.Send(ctx, tplId, args, numbers...); err != nil {
 		if s.errorDetector(err) {
-			if rate := s.rateCounter.Add(true); rate > s.threshold {
+			if rate, err := s.rateCounter.Add(true); err != nil {
+				return err
+			} else if rate > s.threshold {
 				return ErrThirdPartyProviderCrash
 			}
 		}
@@ -44,7 +48,8 @@ func (s *FaultDetectBySlidingWindowErrorRateSMSService) Send(ctx context.Context
 }
 
 type RateCounter interface {
-	Add(matched bool) float64 // return rate
+	StartExpireJob(ctx context.Context) error
+	Add(matched bool) (float64, error) // return rate
 }
 
 type SlidingWindowRateCounter struct {
@@ -94,35 +99,43 @@ func NewSlidingWindowRateCounter(window int, countInterval int, unit time.Durati
 	return rateCounter
 }
 
-func (c *SlidingWindowRateCounter) Add(matched bool) float64 {
+func (c *SlidingWindowRateCounter) Add(matched bool) (float64, error) {
 	if !c.isExpireJobStart {
-		c.startExpireJob()
+		return 0, ErrExpireJobNotStarted
 	}
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	now := time.Now()
 	r := record{time: now, matched: matched, expiredAt: now.Add(c.getWindow())}
 	c.records.Append(r)
 
-	c.lock.Lock()
-	defer c.lock.Unlock()
 	if matched {
 		c.accumulatedMatchedCount++
 	}
 	c.accumulatedCount++
 
-	return float64(c.accumulatedMatchedCount) / float64(c.accumulatedCount)
+	return float64(c.accumulatedMatchedCount) / float64(c.accumulatedCount), nil
 }
 
-func (c *SlidingWindowRateCounter) startExpireJob() {
+func (c *SlidingWindowRateCounter) StartExpireJob(ctx context.Context) error {
+	if c.isExpireJobStart {
+		return nil
+	}
+
 	interval := time.Duration(c.countInterval) * c.unit
 
-	expireJob := func() error {
+	expireJob := func() {
 		time.Sleep(interval)
 
-		for {
+		// delete all expired records
+		for c.records.Len() > 0 {
+			c.lock.Lock()
 			r, err := c.records.Get(0)
 			if err != nil {
-				return err
+				fmt.Printf("error occurs when getting records: %v", err)
+				break
 			}
 			if !r.IsExpired() {
 				break
@@ -130,26 +143,38 @@ func (c *SlidingWindowRateCounter) startExpireJob() {
 
 			if _, err := c.records.Delete(0); err != nil {
 				// 即使删到的资料跟前面get的不同, 也只会有一点点误差
-				return err
+				fmt.Printf("error occurs when deleting records: %v", err)
+				break
 			}
 
-			c.lock.Lock()
 			if r.matched {
 				c.accumulatedMatchedCount--
 			}
 			c.accumulatedCount--
 			c.lock.Unlock()
+			fmt.Printf("Delete one expired record: %+v", r)
 		}
-		return nil
 	}
 
-	go func() {
-		// TODO: gracefully shutdown?
-		for {
-			expireJob()
-		}
-	}()
+	// subCtx, cancel := context.WithCancel(ctx)
 
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default: // non blocking
+				expireJob()
+			}
+		}
+	}(ctx)
+
+	// select {
+	// case <-ctx.Done(): // without default, blocking
+	// 	cancel()
+	// 	return nil
+	// }
+	return nil
 }
 
 func (c *SlidingWindowRateCounter) getWindow() time.Duration {
