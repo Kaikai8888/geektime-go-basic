@@ -52,20 +52,19 @@ type RateCounter interface {
 	Add(matched bool) (float64, error) // return rate
 }
 
+type RateCounterWithAccessToAccumulatedCount interface {
+	RateCounter
+	AccumulatedCount() int
+}
+
 type SlidingWindowRateCounterWithMinDataPointLimit struct {
-	counter           SlidingWindowRateCounter
+	counter           RateCounterWithAccessToAccumulatedCount
 	minDataPointCount int // 至少要收集到一定数量的资料, 才能计算rate, 不然rate = 0
 }
 
-func NewSlidingWindowRateCounterWithMinDataPointLimit(window int, countInterval int, unit time.Duration, minDataPointCount int) RateCounter {
-	counter := NewSlidingWindowRateCounter(window, countInterval, unit)
-
-	rateCounter, ok := counter.(*SlidingWindowRateCounter)
-	if !ok {
-		panic("unexpected type")
-	}
+func NewSlidingWindowRateCounterWithMinDataPointLimit(counter RateCounterWithAccessToAccumulatedCount, window int, countInterval int, unit time.Duration, minDataPointCount int) RateCounter {
 	return &SlidingWindowRateCounterWithMinDataPointLimit{
-		counter:           *rateCounter,
+		counter:           counter,
 		minDataPointCount: minDataPointCount,
 	}
 }
@@ -179,6 +178,10 @@ func (c *SlidingWindowRateCounter) StartExpireJob(ctx context.Context) error {
 
 	c.isExpireJobStart = true
 	return nil
+}
+
+func (c *SlidingWindowRateCounter) AccumulatedCount() int {
+	return c.accumulatedCount
 }
 
 func (c *SlidingWindowRateCounter) expireJob() {
