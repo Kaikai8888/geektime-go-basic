@@ -35,14 +35,16 @@ func TestRateCounter(t *testing.T) {
 		unit = time.Second
 	)
 
-	testCases := []struct {
+	type testCase struct {
 		name          string
 		window        int
 		countInterval int
 		testDuration  int
 		test          func(ctx context.Context, t *testing.T, counter *SlidingWindowRateCounter)
 		willPanic     bool
-	}{
+	}
+
+	testCases := []testCase{
 		{
 			name:          "success case: 每秒发生频率相同",
 			window:        3,
@@ -63,6 +65,7 @@ func TestRateCounter(t *testing.T) {
 						assert.Equal(t, 3, counter.accumulatedMatchedCount, "records should be expired")
 						assert.Equal(t, (2.0+1.0)/(10.0+1.0), rate)
 					} else {
+						// 尚未有资料过期
 						assert.Equal(t, float64(i+1)/float64(i*5+1), rate)
 					}
 
@@ -75,20 +78,54 @@ func TestRateCounter(t *testing.T) {
 
 			},
 			willPanic: false,
+		}, {
+			name:          "background job未启动",
+			window:        3,
+			countInterval: 1,
+			testDuration:  5,
+			test: func(ctx context.Context, t *testing.T, counter *SlidingWindowRateCounter) {
+				rate, err := batchAdd(counter, true, 1)
+				assert.EqualError(t, err, ErrExpireJobNotStarted.Error())
+				assert.Zero(t, rate)
+			},
+			willPanic: false,
+		}, {
+			name:          "will panic: window < count interval",
+			window:        1,
+			countInterval: 3,
+			testDuration:  1,
+			test:          nil,
+			willPanic:     true,
+		}, {
+			name:          "will panic: window 无法被 count interval 整除",
+			window:        1,
+			countInterval: 3,
+			testDuration:  1,
+			test:          nil,
+			willPanic:     true,
 		},
+	}
+
+	testProcess := func(t *testing.T, tc testCase) {
+		rateCounter := NewSlidingWindowRateCounter(tc.window, tc.countInterval, unit)
+
+		counter, ok := (rateCounter).(*SlidingWindowRateCounter)
+		if !ok {
+			assert.FailNow(t, "rate counter is not expected type")
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		tc.test(ctx, t, counter)
+		time.Sleep(time.Duration(tc.testDuration) * unit)
+		cancel()
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			rateCounter := NewSlidingWindowRateCounter(tc.window, tc.countInterval, unit)
-			counter, ok := (rateCounter).(*SlidingWindowRateCounter)
-			if !ok {
-				assert.FailNow(t, "rate counter is not expected type")
+			if tc.willPanic {
+				assert.Panics(t, assert.PanicTestFunc(func() { testProcess(t, tc) }))
+			} else {
+				testProcess(t, tc)
 			}
-			ctx, cancel := context.WithCancel(context.Background())
-			tc.test(ctx, t, counter)
-			time.Sleep(time.Duration(tc.testDuration) * unit)
-			cancel()
 		})
 	}
 
