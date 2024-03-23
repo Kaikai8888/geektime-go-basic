@@ -29,7 +29,7 @@ func batchAdd(counter RateCounter, matched bool, count int) (float64, error) {
 	return finalRate, nil
 }
 
-func TestRateCounter(t *testing.T) {
+func TestSlidingWindowRateCounter(t *testing.T) {
 
 	const (
 		unit = time.Second
