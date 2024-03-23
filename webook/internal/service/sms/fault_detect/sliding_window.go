@@ -163,7 +163,6 @@ func (c *SlidingWindowRateCounter) StartExpireJob(ctx context.Context) error {
 
 	interval := time.Duration(c.countInterval) * c.unit
 
-	// subCtx, cancel := context.WithCancel(ctx)
 	// 定时更新, 避免资料持续累积
 	go func(ctx context.Context) {
 		for {
@@ -178,11 +177,6 @@ func (c *SlidingWindowRateCounter) StartExpireJob(ctx context.Context) error {
 		}
 	}(ctx)
 
-	// select {
-	// case <-ctx.Done(): // without default, blocking
-	// 	cancel()
-	// 	return nil
-	// }
 	c.isExpireJobStart = true
 	return nil
 }
