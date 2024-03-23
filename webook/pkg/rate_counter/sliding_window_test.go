@@ -1,4 +1,4 @@
-package fault_detect
+package rate_counter
 
 import (
 	"context"
