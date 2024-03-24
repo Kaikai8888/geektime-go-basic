@@ -41,3 +41,12 @@ func (s *FaultDetectBySlidingWindowErrorRateSMSService) Send(ctx context.Context
 	}
 	return nil
 }
+
+func IsTimeOutError(err error) bool {
+	switch err {
+	case context.Canceled, context.DeadlineExceeded:
+		// 前者是被取消，后者是超时
+		return true
+	}
+	return false
+}

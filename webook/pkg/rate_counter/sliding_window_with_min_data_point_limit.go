@@ -2,7 +2,6 @@ package rate_counter
 
 import (
 	"context"
-	"time"
 )
 
 type SlidingWindowRateCounterWithMinDataPointLimit struct {
@@ -10,7 +9,7 @@ type SlidingWindowRateCounterWithMinDataPointLimit struct {
 	minDataPointCount int // 至少要收集到一定数量的资料, 才能计算rate, 不然rate = 0
 }
 
-func NewSlidingWindowRateCounterWithMinDataPointLimit(counter RateCounterWithAccessToAccumulatedCount, window int, countInterval int, unit time.Duration, minDataPointCount int) RateCounter {
+func NewSlidingWindowRateCounterWithMinDataPointLimit(counter RateCounterWithAccessToAccumulatedCount, minDataPointCount int) RateCounter {
 	return &SlidingWindowRateCounterWithMinDataPointLimit{
 		counter:           counter,
 		minDataPointCount: minDataPointCount,

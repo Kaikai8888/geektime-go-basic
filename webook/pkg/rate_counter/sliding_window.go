@@ -40,7 +40,7 @@ func (s *record) IsExpired() bool {
 	return s.expiredAt.Before(time.Now())
 }
 
-func NewSlidingWindowRateCounter(window int, countInterval int, unit time.Duration) RateCounter {
+func NewSlidingWindowRateCounter(window int, countInterval int, unit time.Duration) RateCounterWithAccessToAccumulatedCount {
 	if window < countInterval {
 		panic("window should be larger then count interval")
 	}
