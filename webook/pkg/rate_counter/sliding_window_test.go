@@ -56,7 +56,7 @@ func TestSlidingWindowRateCounter(t *testing.T) {
 
 				for i := 0; i < 4; i++ {
 
-					rate, err := batchAdd(counter, true, 1)
+					rate, err := batchAdd(counter, true, 1) // 确保已先触发expire job 再做接下来的检查
 					assert.NoError(t, err)
 
 					if i == 3 {
