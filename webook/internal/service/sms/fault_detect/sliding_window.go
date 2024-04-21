@@ -3,6 +3,7 @@ package fault_detect
 import (
 	"context"
 	"errors"
+	"math/rand"
 
 	"gitee.com/geekbang/basic-go/webook/internal/service/sms"
 	rateCounter "gitee.com/geekbang/basic-go/webook/pkg/rate_counter"
@@ -29,7 +30,8 @@ func NewFaultDetectBySlidingWindowErrorRateSMSService(smsSvc sms.Service, rateCo
 }
 
 func (s *FaultDetectBySlidingWindowErrorRateSMSService) Send(ctx context.Context, tplId string, args []string, numbers ...string) error {
-	if rate := s.rateCounter.GetRate(); rate > s.threshold {
+	// 寄送前先检查错误率, 若已达threshold, 则随机抽样, 10%的流量仍继续尝试发简讯, 90%流量直接视为第三方已崩溃
+	if rate := s.rateCounter.GetRate(); rate > s.threshold && rand.Float64() > 0.1 {
 		return ErrThirdPartyProviderCrash
 	}
 
