@@ -29,9 +29,10 @@ type AsyncFailBackSmsService struct {
 	getRetryRecordsBatchSize int64
 }
 
-func NewAsyncFailBackSmsService(smsSvc sms.Service, maxConcurrency int64, config domain.SmsRequestRetryConfig, getRetryRecordsBatchSize int64) sms.Service {
+func NewAsyncFailBackSmsService(smsSvc sms.Service, smsRequestRepo repository.SmsRequestRepository, maxConcurrency int64, config domain.SmsRequestRetryConfig, getRetryRecordsBatchSize int64) sms.Service {
 	return &AsyncFailBackSmsService{
 		smsSvc:                   smsSvc,
+		smsRequestRepo:           smsRequestRepo,
 		maxConcurrency:           maxConcurrency,
 		retryConfig:              config,
 		getRetryRecordsBatchSize: getRetryRecordsBatchSize,
@@ -54,17 +55,29 @@ func (s *AsyncFailBackSmsService) Send(ctx context.Context, tplId string, args [
 		// start retry background job if not reaching limit
 		count := atomic.LoadInt64(&s.activatedGoroutineCount)
 		if count < s.maxConcurrency {
-			if atomic.CompareAndSwapInt64(&s.activatedGoroutineCount, count, count-1) {
+			if atomic.CompareAndSwapInt64(&s.activatedGoroutineCount, count, count+1) {
 				go func(ctx context.Context) {
 					for {
 						select {
 						case <-ctx.Done():
 							return
 						default:
-							s.retrySend(ctx)
+							if err := s.retrySend(ctx); err == repository.ErrSmsRequestNotFound {
+								/* 没有需要retry的sms request就可结束cronjob
+								 * 如果一直无法更新activatedGoroutineCount, 就继续background job, 至少确保有background job可以处理retry
+								 */
+								for i := 0; i < 3; i++ {
+									count := atomic.LoadInt64(&s.activatedGoroutineCount)
+									if atomic.CompareAndSwapInt64(&s.activatedGoroutineCount, count, count-1) {
+										return
+									}
+									time.Sleep(1 * time.Second)
+								}
+							}
+
 						}
 					}
-				}(ctx)
+				}(context.Background()) // TODO: * 应该改成main function的 context, 才能做到graceful shutdown, 但这样是否就只能直接在main function 启动background job, 而不能再出现错误要retry时才启动？
 			}
 		}
 		return ErrAutoRetryLatter
@@ -82,13 +95,17 @@ func (s *AsyncFailBackSmsService) retrySend(ctx context.Context) error {
 			return nil
 		default:
 			requests, err := s.smsRequestRepo.FindRequestToRetry(ctx, s.retryConfig, int(s.getRetryRecordsBatchSize))
+			if err == repository.ErrSmsRequestNotFound {
+				fmt.Printf("no request records found from db to retry")
+				return err
+			}
 			if err != nil {
 				fmt.Printf("failed to get request records from db to retry")
-				break
+				return err
 			}
 
 			if len(requests) == 0 {
-				break
+				return nil
 			}
 
 			for _, request := range requests {

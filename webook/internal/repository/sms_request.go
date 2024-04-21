@@ -8,6 +8,10 @@ import (
 	"gitee.com/geekbang/basic-go/webook/internal/repository/dao"
 )
 
+var (
+	ErrSmsRequestNotFound = dao.ErrRecordNotFound
+)
+
 type SmsRequestRepository interface {
 	Create(ctx context.Context, smsRequest domain.SmsRequest) (int64, error)
 	FindRequestToRetry(ctx context.Context, config domain.SmsRequestRetryConfig, limit int) ([]domain.SmsRequest, error)
