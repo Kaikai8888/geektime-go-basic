@@ -29,6 +29,10 @@ func NewFaultDetectBySlidingWindowErrorRateSMSService(smsSvc sms.Service, rateCo
 }
 
 func (s *FaultDetectBySlidingWindowErrorRateSMSService) Send(ctx context.Context, tplId string, args []string, numbers ...string) error {
+	if rate := s.rateCounter.GetRate(); rate > s.threshold {
+		return ErrThirdPartyProviderCrash
+	}
+
 	if err := s.smsSvc.Send(ctx, tplId, args, numbers...); err != nil {
 		if s.errorDetector(err) {
 			if rate, err := s.rateCounter.Add(true); err != nil {

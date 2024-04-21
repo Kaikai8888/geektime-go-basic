@@ -27,6 +27,7 @@ func TestFaultDetect_SlidingWindow(t *testing.T) {
 					Return(nil)
 
 				rateCounterSvc := rateCounterMocks.NewMockRateCounter(ctrl)
+				rateCounterSvc.EXPECT().GetRate().Return(threshold)
 				return smsSvc, rateCounterSvc
 			},
 			wantResult: nil,
@@ -39,6 +40,7 @@ func TestFaultDetect_SlidingWindow(t *testing.T) {
 					Return(context.Canceled)
 
 				rateCounterSvc := rateCounterMocks.NewMockRateCounter(ctrl)
+				rateCounterSvc.EXPECT().GetRate().Return(threshold)
 				rateCounterSvc.EXPECT().Add(true).Return(threshold-0.1, nil)
 				return smsSvc, rateCounterSvc
 			},
@@ -52,6 +54,7 @@ func TestFaultDetect_SlidingWindow(t *testing.T) {
 					Return(context.Canceled)
 
 				rateCounterSvc := rateCounterMocks.NewMockRateCounter(ctrl)
+				rateCounterSvc.EXPECT().GetRate().Return(threshold)
 				rateCounterSvc.EXPECT().Add(true).Return(threshold+0.1, nil)
 				return smsSvc, rateCounterSvc
 			},
@@ -65,6 +68,7 @@ func TestFaultDetect_SlidingWindow(t *testing.T) {
 					Return(context.DeadlineExceeded)
 
 				rateCounterSvc := rateCounterMocks.NewMockRateCounter(ctrl)
+				rateCounterSvc.EXPECT().GetRate().Return(threshold)
 				rateCounterSvc.EXPECT().Add(true).Return(threshold-0.1, nil)
 				return smsSvc, rateCounterSvc
 			},
@@ -78,7 +82,18 @@ func TestFaultDetect_SlidingWindow(t *testing.T) {
 					Return(context.DeadlineExceeded)
 
 				rateCounterSvc := rateCounterMocks.NewMockRateCounter(ctrl)
+				rateCounterSvc.EXPECT().GetRate().Return(threshold)
 				rateCounterSvc.EXPECT().Add(true).Return(threshold+0.1, nil)
+				return smsSvc, rateCounterSvc
+			},
+			wantResult: ErrThirdPartyProviderCrash,
+		}, {
+			name: "current rate already exists threshold",
+			mocks: func(ctrl *gomock.Controller) (sms.Service, rateCounter.RateCounter) {
+				smsSvc := smsmocks.NewMockService(ctrl)
+
+				rateCounterSvc := rateCounterMocks.NewMockRateCounter(ctrl)
+				rateCounterSvc.EXPECT().GetRate().Return(threshold + 0.1)
 				return smsSvc, rateCounterSvc
 			},
 			wantResult: ErrThirdPartyProviderCrash,

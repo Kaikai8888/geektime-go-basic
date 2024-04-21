@@ -54,6 +54,20 @@ func (mr *MockRateCounterMockRecorder) Add(matched any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRateCounter)(nil).Add), matched)
 }
 
+// GetRate mocks base method.
+func (m *MockRateCounter) GetRate() float64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRate")
+	ret0, _ := ret[0].(float64)
+	return ret0
+}
+
+// GetRate indicates an expected call of GetRate.
+func (mr *MockRateCounterMockRecorder) GetRate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRate", reflect.TypeOf((*MockRateCounter)(nil).GetRate))
+}
+
 // StartExpireJob mocks base method.
 func (m *MockRateCounter) StartExpireJob(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -118,6 +132,20 @@ func (m *MockRateCounterWithAccessToAccumulatedCount) Add(matched bool) (float64
 func (mr *MockRateCounterWithAccessToAccumulatedCountMockRecorder) Add(matched any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRateCounterWithAccessToAccumulatedCount)(nil).Add), matched)
+}
+
+// GetRate mocks base method.
+func (m *MockRateCounterWithAccessToAccumulatedCount) GetRate() float64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRate")
+	ret0, _ := ret[0].(float64)
+	return ret0
+}
+
+// GetRate indicates an expected call of GetRate.
+func (mr *MockRateCounterWithAccessToAccumulatedCountMockRecorder) GetRate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRate", reflect.TypeOf((*MockRateCounterWithAccessToAccumulatedCount)(nil).GetRate))
 }
 
 // StartExpireJob mocks base method.

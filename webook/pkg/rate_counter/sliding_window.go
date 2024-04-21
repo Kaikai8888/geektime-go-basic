@@ -114,6 +114,14 @@ func (c *SlidingWindowRateCounter) AccumulatedCount() int {
 	return c.accumulatedCount
 }
 
+func (c *SlidingWindowRateCounter) GetRate() float64 {
+	if c.accumulatedCount == 0 {
+		return 0
+	}
+
+	return float64(c.accumulatedMatchedCount) / float64(c.accumulatedCount)
+}
+
 func (c *SlidingWindowRateCounter) expireJob() {
 	// lock the whole counter until current expire job end
 	c.lock.Lock()

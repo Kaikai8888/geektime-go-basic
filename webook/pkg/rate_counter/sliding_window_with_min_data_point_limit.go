@@ -32,3 +32,10 @@ func (c *SlidingWindowRateCounterWithMinDataPointLimit) Add(matched bool) (float
 
 	return rate, nil
 }
+
+func (c *SlidingWindowRateCounterWithMinDataPointLimit) GetRate() float64 {
+	if c.counter.AccumulatedCount() < c.minDataPointCount {
+		return 0
+	}
+	return c.counter.GetRate()
+}
