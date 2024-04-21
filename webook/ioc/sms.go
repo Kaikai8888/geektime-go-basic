@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gitee.com/geekbang/basic-go/webook/internal/domain"
+	"gitee.com/geekbang/basic-go/webook/internal/repository"
 	"gitee.com/geekbang/basic-go/webook/internal/service/sms"
 
 	"gitee.com/geekbang/basic-go/webook/internal/service/sms/failback"
@@ -23,13 +24,13 @@ import (
 	tencentSMS "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/sms/v20210111"
 )
 
-func InitSMSService(redisClient redis.Cmdable) sms.Service {
+func InitSMSService(redisClient redis.Cmdable, smsRequestRepo repository.SmsRequestRepository) sms.Service {
 	//return ratelimit.NewRateLimitSMSService(localsms.NewService(), limiter.NewRedisSlidingWindowLimiter())
 	service := localsms.NewService()
 	// 如果有需要，就可以用这个
 	//return initTencentSMSService()
 
-	return initFailBackSMSService(service, redisClient)
+	return initFailBackSMSService(service, redisClient, smsRequestRepo)
 }
 
 func initTencentSMSService() sms.Service {
@@ -52,7 +53,7 @@ func initTencentSMSService() sms.Service {
 	return tencent.NewService(c, "1400842696", "妙影科技")
 }
 
-func initFailBackSMSService(service sms.Service, redisClient redis.Cmdable) sms.Service {
+func initFailBackSMSService(service sms.Service, redisClient redis.Cmdable, smsRequestRepo repository.SmsRequestRepository) sms.Service {
 	const (
 		defaultErrorRateThreshold         = 0.9
 		defaultErrorRateSlidingWindow     = 5
@@ -80,7 +81,7 @@ func initFailBackSMSService(service sms.Service, redisClient redis.Cmdable) sms.
 	rateCounter := rateCounter.NewSlidingWindowRateCounterWithMinDataPointLimit(baseRateCounter, defaultErrorRateMinDataPointLimit)
 	serviceWithRatelimit := ratelimit.NewRateLimitSMSService(service, limiter)
 	serviceWithFaultDetection := faultDetect.NewFaultDetectBySlidingWindowErrorRateSMSService(serviceWithRatelimit, rateCounter, defaultErrorRateThreshold, faultDetect.IsTimeOutError)
-	serviceWithFailBack := failback.NewAsyncFailBackSmsService(serviceWithFaultDetection, defaultMaxFailBackRetryConcurrency, defaultRetryConfig, defaultGetRetryRecordsBatchSize)
+	serviceWithFailBack := failback.NewAsyncFailBackSmsService(serviceWithFaultDetection, smsRequestRepo, defaultMaxFailBackRetryConcurrency, defaultRetryConfig, int64(defaultGetRetryRecordsBatchSize))
 
 	return serviceWithFailBack
 }
