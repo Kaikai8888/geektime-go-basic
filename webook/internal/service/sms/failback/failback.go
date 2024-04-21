@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/signal"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"gitee.com/geekbang/basic-go/webook/internal/domain"
@@ -56,6 +58,9 @@ func (s *AsyncFailBackSmsService) Send(ctx context.Context, tplId string, args [
 		count := atomic.LoadInt64(&s.activatedGoroutineCount)
 		if count < s.maxConcurrency {
 			if atomic.CompareAndSwapInt64(&s.activatedGoroutineCount, count, count+1) {
+				// 因这传入的是api request的gin context, 而不是main process的context, 因此只能另外间听当前goroutine有无收到shutdown的signal
+				currentProcessCtx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+
 				go func(ctx context.Context) {
 					for {
 						select {
@@ -77,7 +82,7 @@ func (s *AsyncFailBackSmsService) Send(ctx context.Context, tplId string, args [
 
 						}
 					}
-				}(context.Background()) // TODO: * 应该改成main function的 context, 才能做到graceful shutdown, 但这样是否就只能直接在main function 启动background job, 而不能再出现错误要retry时才启动？
+				}(currentProcessCtx) // 只能监听到当前goroutine收到的signal, 只有在service是在main goroutine上执行时, 才能做到main process收到signal后到实际shutdown前不会再retry, 避免retry了但还未更新db资料, 就被shutdown, 而造成后续重复retry, 发送讯息
 			}
 		}
 		return ErrAutoRetryLatter
