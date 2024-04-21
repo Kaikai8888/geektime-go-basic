@@ -92,7 +92,7 @@ func (s *AsyncFailBackSmsService) Send(ctx context.Context, tplId string, args [
 }
 
 func (s *AsyncFailBackSmsService) retrySend(ctx context.Context) error {
-	time.Sleep(s.retryConfig.GetRecordsInterval) // TODO: use ctx.WithDeadline / ctx.WithTimeout instead?
+	time.Sleep(s.retryConfig.GetRecordsInterval)
 
 	for {
 		select {

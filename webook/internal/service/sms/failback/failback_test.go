@@ -76,6 +76,41 @@ func TestFaultDetect_SlidingWindow(t *testing.T) {
 			},
 			wantResult: ErrAutoRetryLatter,
 			wait:       config.GetRecordsInterval * 3,
+		}, {
+			name: "ratelimit.ErrLimited occurs, retry twice and success",
+			mocks: func(ctrl *gomock.Controller) (sms.Service, repository.SmsRequestRepository) {
+				smsSvc := smsmocks.NewMockService(ctrl)
+				firstCall := smsSvc.EXPECT().Send(gomock.Any(), tplId, gomock.Any(), number).
+					Return(ratelimit.ErrLimited).Times(2)
+				smsSvc.EXPECT().Send(gomock.Any(), tplId, gomock.Any(), number).
+					Return(nil).After(firstCall)
+
+				repo := repomocks.NewMockSmsRequestRepository(ctrl)
+				repo.EXPECT().Create(gomock.Any(), domain.SmsRequest{
+					TplId:   tplId,
+					Numbers: []string{number},
+				}).Return(int64(1), nil).Times(1)
+
+				firstFind := repo.EXPECT().FindRequestToRetry(gomock.Any(), config, getRetryRecordsBatchSize).Return([]domain.SmsRequest{{
+					Id:      int64(1),
+					TplId:   tplId,
+					Numbers: []string{number},
+				}}, nil)
+				secondFind := repo.EXPECT().FindRequestToRetry(gomock.Any(), config, getRetryRecordsBatchSize).Return([]domain.SmsRequest{{
+					Id:         int64(1),
+					TplId:      tplId,
+					Numbers:    []string{number},
+					RetryCount: 1,
+				}}, nil).After(firstFind)
+				repo.EXPECT().FindRequestToRetry(gomock.Any(), config, getRetryRecordsBatchSize).Return([]domain.SmsRequest{}, repository.ErrSmsRequestNotFound).After(secondFind).MinTimes(1)
+
+				repo.EXPECT().MarkAsRetrySucceeded(gomock.Any(), int64(1)).Return(nil).Times(1)
+				repo.EXPECT().MarkAsRetryFailed(gomock.Any(), int64(1)).Return(nil).Times(1)
+
+				return smsSvc, repo
+			},
+			wantResult: ErrAutoRetryLatter,
+			wait:       config.GetRecordsInterval * 3,
 		},
 	}
 
