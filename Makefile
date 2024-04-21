@@ -9,4 +9,5 @@ mock:
 	@mockgen -source=./webook/internal/repository/cache/user.go -package=cachemocks -destination=./webook/internal/repository/cache/mocks/user.mock.go
 	@mockgen -source=./webook/internal/repository/cache/code.go -package=cachemocks -destination=./webook/internal/repository/cache/mocks/code.mock.go
 	@mockgen -source=./webook/pkg/limiter/types.go -package=limitermocks -destination=./webook/pkg/limiter/mocks/limiter.mock.go
+	@mockgen -source=./webook/pkg/rate_counter/types.go -package=rate_counter -destination=./webook/pkg/rate_counter/mocks/rate_counter.mock.go
 	@go mod tidy
