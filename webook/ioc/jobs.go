@@ -13,21 +13,28 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+type rankingJobSet struct {
+	rankingJob    *job.RankingJob
+	reportLoadJob *job.ReportLoadJob
+}
+
 func InitRankingJobAndReportLoadJob(svc service.RankingService, loadSvc service.LoadService,
 	client *rlock.Client,
 	redis redis.Cmdable,
 	uuidFn util.UuidFn,
-	l logger.LoggerV1) (*job.RankingJob, *job.ReportLoadJob) {
+	l logger.LoggerV1) *rankingJobSet {
 	instanceId, err := uuidFn()
 	if err != nil {
 		l.Error("Failed to generate instance id", logger.Error(err))
 		panic("Failed to generate instance id")
 	}
-	return job.NewRankingJob(svc, client, loadSvc, instanceId, l, time.Second*30),
-		job.NewReportLoadJob(loadSvc, redis, l, instanceId, time.Second*30)
+	return &rankingJobSet{
+		rankingJob:    job.NewRankingJob(svc, client, loadSvc, instanceId, l, time.Second*30),
+		reportLoadJob: job.NewReportLoadJob(loadSvc, redis, l, instanceId, time.Second*30),
+	}
 }
 
-func InitJobs(l logger.LoggerV1, rankingJob *job.RankingJob) *cron.Cron {
+func InitJobs(l logger.LoggerV1, rankingJobSet *rankingJobSet) *cron.Cron {
 	bd := job.NewCronJobBuilder(l, prometheus.SummaryOpts{
 		Namespace: "geekbang_daming",
 		Subsystem: "webook",
@@ -36,7 +43,13 @@ func InitJobs(l logger.LoggerV1, rankingJob *job.RankingJob) *cron.Cron {
 	})
 	expr := cron.New(cron.WithSeconds())
 	_, err := expr.AddJob("@every 1m",
-		bd.Build(rankingJob))
+		bd.Build(rankingJobSet.rankingJob))
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = expr.AddJob("@every 15s",
+		bd.Build(rankingJobSet.reportLoadJob))
 	if err != nil {
 		panic(err)
 	}

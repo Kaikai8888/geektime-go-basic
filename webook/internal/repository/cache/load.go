@@ -16,7 +16,7 @@ type loadRedisCache struct {
 	keyPrefix string
 }
 
-func NewLoadRedisCache(client redis.Cmdable) *loadRedisCache {
+func NewRedisLoadCache(client redis.Cmdable) LoadCache {
 	return &loadRedisCache{
 		client:    client,
 		keyPrefix: "load",

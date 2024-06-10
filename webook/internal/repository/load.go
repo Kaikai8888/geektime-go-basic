@@ -15,7 +15,7 @@ type loadRepository struct {
 	cache cache.LoadCache
 }
 
-func NewLoadRepository(cache cache.LoadCache) *loadRepository {
+func NewLoadRepository(cache cache.LoadCache) LoadRepository {
 	return &loadRepository{
 		cache: cache,
 	}
