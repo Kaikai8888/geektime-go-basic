@@ -2,11 +2,12 @@ package job
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"gitee.com/geekbang/basic-go/webook/internal/service"
 	"gitee.com/geekbang/basic-go/webook/pkg/logger"
 	rlock "github.com/gotomicro/redis-lock"
-	"sync"
-	"time"
 )
 
 type RankingJob struct {
@@ -22,11 +23,17 @@ type RankingJob struct {
 	// 也可以用原子操作。但是作为一个定时指定的任务，不在意这么一点性能
 	localLock sync.Mutex
 	lock      *rlock.Lock
+
+	loadBiz    string
+	loadSvc    service.LoadService
+	instanceId string
 }
 
 func NewRankingJob(
 	svc service.RankingService,
 	lockClient *rlock.Client,
+	loadSvc service.LoadService,
+	instanceId string,
 	l logger.LoggerV1,
 	timeout time.Duration) *RankingJob {
 	return &RankingJob{
@@ -35,11 +42,18 @@ func NewRankingJob(
 		timeout:    timeout,
 		key:        "job:ranking",
 		l:          l,
+		instanceId: instanceId,
+		loadBiz:    "cronjob",
+		loadSvc:    loadSvc,
 	}
 }
 
 func (r *RankingJob) Name() string {
 	return "ranking"
+}
+
+func (r *RankingJob) Run() error {
+	return r.RunV1()
 }
 
 // RunV1 持有锁之后，就一直不放，除非关机，或者突然宕机
@@ -48,6 +62,10 @@ func (r *RankingJob) RunV1() error {
 	lock := r.lock
 
 	if lock == nil {
+		if !r.hasLowestLoad() {
+			return nil
+		}
+
 		// 试着拿锁
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 		defer cancel()
@@ -69,6 +87,9 @@ func (r *RankingJob) RunV1() error {
 		// r.timeout 的一半作为刷新间隔。你这边可以设置为几秒钟，因为访问 Redis 是很快的
 		// 每次续约 r.timeout 的时间（也就是分布式锁的过期时间重置为 r.timeout
 		go func() {
+			if !r.hasLowestLoad() {
+				return
+			}
 			err = lock.AutoRefresh(r.timeout/2, r.timeout)
 			// 续约失败
 			// 有几种可能，自己和 Redis 失去了连接
@@ -97,7 +118,7 @@ func (r *RankingJob) Close() error {
 	return lock.Unlock(ctx)
 }
 
-func (r *RankingJob) Run() error {
+func (r *RankingJob) RunV0() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
 	// 加锁本身，我们使用一个ctx
@@ -133,6 +154,19 @@ func (r *RankingJob) run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
 	return r.svc.RankTopN(ctx)
+}
+
+func (r *RankingJob) hasLowestLoad() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+	defer cancel()
+	if isLowest, err := r.loadSvc.IsLowestLoad(ctx, r.loadBiz, r.instanceId); err != nil {
+		r.l.Error("检查负载失败", logger.Error(err))
+		return false
+	} else if !isLowest {
+		r.l.Info("不是最低负载节点，跳过")
+		return false
+	}
+	return true
 }
 
 var _ Job = (*RankingJob)(nil)
