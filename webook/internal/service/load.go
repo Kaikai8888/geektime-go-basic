@@ -10,6 +10,10 @@ import (
 	"github.com/shirou/gopsutil/cpu"
 )
 
+var (
+	ErrLoadDataNotFound = repository.ErrLoadDataNotFound
+)
+
 type LoadService interface {
 	ReportLoad(ctx context.Context, biz, instanceId string) error
 	IsLowestLoad(ctx context.Context, biz, instanceId string) (bool, error)

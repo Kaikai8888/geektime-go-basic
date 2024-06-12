@@ -6,6 +6,10 @@ import (
 	"gitee.com/geekbang/basic-go/webook/internal/repository/cache"
 )
 
+var (
+	ErrLoadDataNotFound = cache.ErrLoadDataNotFound
+)
+
 type LoadRepository interface {
 	Record(ctx context.Context, biz, id string, load float64) error
 	IsLowest(ctx context.Context, biz, id string) (bool, error)

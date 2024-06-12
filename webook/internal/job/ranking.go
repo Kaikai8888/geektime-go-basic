@@ -62,7 +62,7 @@ func (r *RankingJob) RunV1() error {
 	lock := r.lock
 
 	if lock == nil {
-		if !r.hasLowestLoad() {
+		if !r.hasLowestLoadOrHasNoLoadData() {
 			return nil
 		}
 
@@ -87,7 +87,7 @@ func (r *RankingJob) RunV1() error {
 		// r.timeout 的一半作为刷新间隔。你这边可以设置为几秒钟，因为访问 Redis 是很快的
 		// 每次续约 r.timeout 的时间（也就是分布式锁的过期时间重置为 r.timeout
 		go func() {
-			if !r.hasLowestLoad() {
+			if !r.hasLowestLoadOrHasNoLoadData() {
 				return
 			}
 			err = lock.AutoRefresh(r.timeout/2, r.timeout)
@@ -156,10 +156,13 @@ func (r *RankingJob) run() error {
 	return r.svc.RankTopN(ctx)
 }
 
-func (r *RankingJob) hasLowestLoad() bool {
+func (r *RankingJob) hasLowestLoadOrHasNoLoadData() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
-	if isLowest, err := r.loadSvc.IsLowestLoad(ctx, r.loadBiz, r.instanceId); err != nil {
+	if isLowest, err := r.loadSvc.IsLowestLoad(ctx, r.loadBiz, r.instanceId); err == service.ErrLoadDataNotFound {
+		r.l.Info("没有负载数据，可以搶鎖")
+		return true
+	} else if err != nil {
 		r.l.Error("检查负载失败", logger.Error(err))
 		return false
 	} else if !isLowest {
