@@ -62,7 +62,7 @@ func InitApp() *App {
 	rankingLocalCache := cache.NewRankingLocalCache()
 	rankingRepository := repository.NewCachedRankingRepository(redisRankingCache, rankingLocalCache)
 	rankingService := service.NewBatchRankingService(interactiveService, articleService, rankingRepository)
-	loadCache := cache.NewRedisLoadCache(cmdable)
+	loadCache := cache.NewRedisLoadCache(cmdable, loggerV1)
 	loadRepository := repository.NewLoadRepository(loadCache)
 	loadService := service.NewLoadService(loadRepository, loggerV1)
 	rlockClient := ioc.InitRLockClient(cmdable)
