@@ -5,9 +5,11 @@ import (
 	"sync"
 	"time"
 
+	rlock "github.com/gotomicro/redis-lock"
+
 	"gitee.com/geekbang/basic-go/webook/internal/service"
 	"gitee.com/geekbang/basic-go/webook/pkg/logger"
-	rlock "github.com/gotomicro/redis-lock"
+	redislockx "gitee.com/geekbang/basic-go/webook/pkg/redislockx"
 )
 
 type RankingJob struct {
@@ -87,10 +89,7 @@ func (r *RankingJob) RunV1() error {
 		// r.timeout 的一半作为刷新间隔。你这边可以设置为几秒钟，因为访问 Redis 是很快的
 		// 每次续约 r.timeout 的时间（也就是分布式锁的过期时间重置为 r.timeout
 		go func() {
-			if !r.hasLowestLoadOrHasNoLoadData() {
-				return
-			}
-			err = lock.AutoRefresh(r.timeout/2, r.timeout)
+			err := redislockx.CheckAndAutoRefresh(time.Second*3, r.timeout, lock, r.hasLowestLoadOrHasNoLoadData)
 			// 续约失败
 			// 有几种可能，自己和 Redis 失去了连接
 			if err != nil {
