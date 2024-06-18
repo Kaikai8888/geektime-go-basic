@@ -2,11 +2,12 @@ package job
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"gitee.com/geekbang/basic-go/webook/internal/service"
 	"gitee.com/geekbang/basic-go/webook/pkg/logger"
 	rlock "github.com/gotomicro/redis-lock"
-	"sync"
-	"time"
 )
 
 type RankingJob struct {
@@ -43,7 +44,7 @@ func (r *RankingJob) Name() string {
 }
 
 // RunV1 持有锁之后，就一直不放，除非关机，或者突然宕机
-func (r *RankingJob) RunV1() error {
+func (r *RankingJob) Run() error {
 	r.localLock.Lock()
 	lock := r.lock
 
@@ -52,6 +53,7 @@ func (r *RankingJob) RunV1() error {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 		defer cancel()
 		var err error
+		r.l.Debug("Try to get lock", logger.String("name", r.Name()))
 		lock, err = r.lockClient.Lock(ctx, r.key, r.timeout,
 			// 每隔 100ms 重试一次，每次重试的超时时间是 1s
 			&rlock.FixIntervalRetry{
@@ -59,6 +61,7 @@ func (r *RankingJob) RunV1() error {
 				Max:      3,
 			}, time.Second)
 		if err != nil {
+			r.l.Error("Failed to reempt lock", logger.Error(err))
 			r.localLock.Unlock()
 			// 这边不需要返回 error，因为这时候可能是别的节点一直占着锁
 			return nil
@@ -97,7 +100,7 @@ func (r *RankingJob) Close() error {
 	return lock.Unlock(ctx)
 }
 
-func (r *RankingJob) Run() error {
+func (r *RankingJob) RunV0() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
 	// 加锁本身，我们使用一个ctx
