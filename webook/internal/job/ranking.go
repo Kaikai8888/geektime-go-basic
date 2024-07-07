@@ -99,6 +99,8 @@ func (r *RankingJob) RunV1() error {
 				r.localLock.Unlock()
 			}
 		}()
+	} else {
+		defer r.localLock.Unlock()
 	}
 	return r.run()
 }
