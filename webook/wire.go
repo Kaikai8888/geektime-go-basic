@@ -29,10 +29,11 @@ func InitApp() *App {
 		ioc.InitKafka,
 		ioc.InitRLockClient,
 		ioc.NewSyncProducer,
+		ioc.InitUuidFn,
 
 		rankServiceProvider,
 		ioc.InitJobs,
-		ioc.InitRankingJob,
+		ioc.InitRankingJobAndReportLoadJob,
 
 		// DAO 部分
 		dao.NewGORMUserDAO,
@@ -44,12 +45,14 @@ func InitApp() *App {
 		cache.NewRedisCodeCache,
 		cache.NewRedisArticleCache,
 		cache.NewRedisInteractiveCache,
+		cache.NewRedisLoadCache,
 
 		// repository 部分
 		repository.NewCachedUserRepository,
 		repository.NewCachedCodeRepository,
 		repository.NewArticleRepository,
 		repository.NewCachedInteractiveRepository,
+		repository.NewLoadRepository,
 
 		// events 部分
 		article2.NewSaramaSyncProducer,
@@ -63,6 +66,7 @@ func InitApp() *App {
 		service.NewUserService,
 		service.NewArticleService,
 		service.NewInteractiveService,
+		service.NewLoadService,
 
 		// handler 部分
 		ijwt.NewRedisHandler,
